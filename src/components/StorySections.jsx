@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Heart, Play, Sparkles } from "lucide-react";
+import { ArrowUpRight, Heart, LoaderCircle, Play, Send, Sparkles } from "lucide-react";
+import { fetchMelodyAnswer } from "../lib/melodyApi";
+import { useCountUp } from "../lib/useCountUp";
 import { LaboratoryCanvas, MelodyFingerprint, PitchContour, Spectrum } from "./MelodyVisuals";
 
 const analysisStats = [
@@ -69,21 +71,71 @@ export function MelodyAnalysis() {
 }
 
 export function MelodyPipeline() {
-  return <ScrollSection id="inside-melody" eyebrow="03 / inside the melody" title="Inside the melody." className="pipeline-section"><p className="section-lede">A small tour through the signal chain behind a song search.</p><div className="pipeline-grid">{stages.map(([name, label, description], index) => <article className="pipeline-stage" key={name}><span className="stage-index">0{index + 1}</span><div className="stage-visual">{index === 0 && <PitchContour compact />}{index === 1 && <Spectrum compact />}{index === 2 && <Spectrum compact />}{index === 3 && <PitchContour compact />}{index === 4 && <div className="note-sequence"><i /><i /><i /><i /><i /></div>}{index === 5 && <div className="match-traces"><span /><span /></div>}</div><p className="stage-label">{label}</p><h3>{name}</h3><p>{description}</p><span className="stage-detail">{index === 5 ? <>MELODY ALIGNMENT<br />PITCH SIMILARITY 91% / CONTOUR SIMILARITY 94%<br />DTW DISTANCE 0.173</> : ["Amplitude over time", "Signal shape preserved", "Peaks isolate harmonics", "Notes become a trace", "Shape survives simplification"][index]}</span></article>)}</div></ScrollSection>;
+  return <ScrollSection id="inside-melody" eyebrow="03 / inside the melody" title="Inside the melody." className="pipeline-section"><p className="section-lede">A small tour through the signal chain behind a song search.</p><div className="pipeline-grid">{stages.map(([name, label, description], index) => <article className={`pipeline-stage stage-accent-${["orange", "purple", "pink", "amber", "teal", "blue"][index]}`} key={name}><span className="stage-index">0{index + 1}</span><div className="stage-visual">{index === 0 && <PitchContour compact />}{index === 1 && <Spectrum compact />}{index === 2 && <Spectrum compact />}{index === 3 && <PitchContour compact />}{index === 4 && <div className="note-sequence"><i /><i /><i /><i /><i /></div>}{index === 5 && <div className="match-traces"><span /><span /></div>}</div><p className="stage-label">{label}</p><h3>{name}</h3><p>{description}</p><span className="stage-detail">{index === 5 ? <>MELODY ALIGNMENT<br />PITCH SIMILARITY 91% / CONTOUR SIMILARITY 94%<br />DTW DISTANCE 0.173</> : ["Amplitude over time", "Signal shape preserved", "Peaks isolate harmonics", "Notes become a trace", "Shape survives simplification"][index]}</span></article>)}</div></ScrollSection>;
 }
 
 function MatchDetails() {
   return <div className="match-details"><div><p className="eyebrow">Why this match?</p><p className="match-explanation">Your melody follows a similar upward and downward pitch pattern.</p></div><div className="detail-metrics"><div><span>Pitch similarity</span><b>91%</b></div><div><span>Melody contour</span><b>94%</b></div><div><span>Tempo similarity</span><b>87%</b></div></div></div>;
 }
 
+function MatchRow({ song, index, isOpen, onOpen }) {
+  const score = Math.min(100, Math.max(0, Number(song.confidence) || 0));
+  const displayScore = useCountUp(score, { duration: 700 + index * 130 });
+  return (
+    <article className={`premium-match ${isOpen ? "is-expanded" : ""}`} style={{ "--row-delay": `${index * 60}ms` }}>
+      <button className="match-main" type="button" onClick={onOpen} aria-expanded={isOpen}>
+        <span className="rank">{String(index + 1).padStart(2, "0")}</span>
+        <span className={`cover-art cover-${index % 4}`}><span>MM</span></span>
+        <span className="match-info">
+          <strong>{song.title || "Untitled track"}</strong>
+          <span>{song.artist || "Unknown artist"}</span>
+          <i><em style={{ width: `${displayScore}%` }} /></i>
+          <small>{displayScore.toFixed(1)}% similarity</small>
+        </span>
+        <Play size={16} className="row-play" />
+      </button>
+      {song.youtube_url && <a className="match-youtube" href={song.youtube_url} target="_blank" rel="noopener noreferrer">Watch on YouTube <ArrowUpRight size={14} /></a>}
+      <button className="favorite-button" type="button" aria-label={`Favorite ${song.title}`}>
+        <Heart size={16} />
+      </button>
+      {isOpen && <MatchDetails />}
+    </article>
+  );
+}
+
 export function MatchResults({ matches, reasoningFeatures, aiInsights, onSelect }) {
   const [expanded, setExpanded] = useState(null);
+  const [question, setQuestion] = useState("");
+  const [chatAnswer, setChatAnswer] = useState("");
+  const [chatError, setChatError] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
   const visibleMatches = matches.length ? matches : [
     { id: "demo-1", title: "Bekhayali", artist: "Sachet Tandon", confidence: 92.4, youtube_url: "https://www.youtube.com/watch?v=RqiQmj4hlzM" },
     { id: "demo-2", title: "Mile Ho Tum — Reprise", artist: "Neha Kakkar", confidence: 88.7 },
     { id: "demo-3", title: "Tere Sang Yaara", artist: "Atif Aslam", confidence: 84.9 },
     { id: "demo-4", title: "Tera Ban Jaunga", artist: "Akhil Sachdeva", confidence: 81.6 },
   ];
+
+  const askMelodyQuestion = async (event) => {
+    event.preventDefault();
+    const trimmedQuestion = question.trim();
+    if (!trimmedQuestion || isChatLoading) return;
+    setIsChatLoading(true);
+    setChatError("");
+    setChatAnswer("");
+    try {
+      setChatAnswer(await fetchMelodyAnswer(trimmedQuestion));
+    } catch (error) {
+      setChatError(error.status === 404
+        ? "The melody guide endpoint is not available at /api/chat. Add and mount the backend chat route."
+        : "Could not reach the chat service. Check that the backend is running.");
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  const topScore = Math.min(100, Number(visibleMatches[0].confidence) || 0);
+  const displayTopScore = useCountUp(topScore, { duration: 1100 });
 
   return (
     <ScrollSection id="matches" eyebrow="04 / match results" title="Could this be it?">
@@ -93,35 +145,27 @@ export function MatchResults({ matches, reasoningFeatures, aiInsights, onSelect 
           <strong>{visibleMatches[0].title}</strong>
           <span>{visibleMatches[0].artist}</span>
         </div>
-        <div className="signal-score"><small>similarity</small><b>{Math.min(100, Number(visibleMatches[0].confidence) || 0).toFixed(1)}%</b></div>
+        <div className="signal-score"><small>similarity</small><b>{displayTopScore.toFixed(1)}%</b></div>
       </div>
       <div className="match-list premium-list">
         {visibleMatches.slice(0, 5).map((song, index) => {
-          const score = Math.min(100, Math.max(0, Number(song.confidence) || 0));
-          const isOpen = expanded === (song.id || index);
-          return (
-            <article className={`premium-match ${isOpen ? "is-expanded" : ""}`} key={song.id || `${song.title}-${index}`}>
-              <button className="match-main" type="button" onClick={() => { setExpanded(isOpen ? null : (song.id || index)); onSelect?.(song); }} aria-expanded={isOpen}>
-                <span className="rank">{String(index + 1).padStart(2, "0")}</span>
-                <span className={`cover-art cover-${index % 4}`}><span>MM</span></span>
-                <span className="match-info">
-                  <strong>{song.title || "Untitled track"}</strong>
-                  <span>{song.artist || "Unknown artist"}</span>
-                  <i><em style={{ width: `${score}%` }} /></i>
-                  <small>{score.toFixed(1)}% similarity</small>
-                </span>
-                <Play size={16} className="row-play" />
-              </button>
-              <button className="favorite-button" type="button" aria-label={`Favorite ${song.title}`}>
-                <Heart size={16} />
-              </button>
-              {isOpen && <MatchDetails />}
-            </article>
-          );
+          const rowId = song.id || index;
+          const isOpen = expanded === rowId;
+          return <MatchRow key={rowId} song={song} index={index} isOpen={isOpen} onOpen={() => { setExpanded(isOpen ? null : rowId); onSelect?.(song); }} />;
         })}
       </div>
       {reasoningFeatures?.length > 0 && <div className="reasoning-note"><Sparkles size={17} /><span>Detailed signal analysis is available below in the MelodyMatch patch bay.</span></div>}
       {aiInsights && <div className="insight-block"><div><p className="eyebrow">A little extra context</p><p>{aiInsights}</p></div></div>}
+      <div className="chat-panel">
+        <div><p className="eyebrow">Ask the melody guide</p><p className="chat-prompt">Want to know more about this match?</p></div>
+        <form className="chat-form" onSubmit={askMelodyQuestion}>
+          <label className="sr-only" htmlFor="melody-question">Ask about your melody</label>
+          <input id="melody-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Why does this song match?" disabled={isChatLoading} />
+          <button type="submit" aria-label="Ask melody guide" disabled={!question.trim() || isChatLoading}>{isChatLoading ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}</button>
+        </form>
+        {chatAnswer && <p className="chat-answer">{chatAnswer}</p>}
+        {chatError && <p className="chat-error" role="alert">{chatError}</p>}
+      </div>
     </ScrollSection>
   );
 }

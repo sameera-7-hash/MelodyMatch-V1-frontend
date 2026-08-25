@@ -4,8 +4,27 @@ export async function searchMelody(audioBlob) {
   const formData = new FormData();
   formData.append("file", audioBlob, "hum.wav");
   const response = await fetch(`${API_BASE_URL}/api/match-melody`, { method: "POST", body: formData });
-  if (!response.ok) throw new Error(`Server status: ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(`Server status: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   return response.json();
+}
+
+export async function fetchMelodyAnswer(userQuery) {
+  const response = await fetch(`${API_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: userQuery }),
+  });
+  if (!response.ok) {
+    const error = new Error(`Server status: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  const data = await response.json();
+  return data.answer;
 }
 
 export function getMockMelodyAnalysis() {

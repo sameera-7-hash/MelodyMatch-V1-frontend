@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCountUp } from "../lib/useCountUp";
 import "./MatchReasoningBoard.css";
 
 const DEFAULT_POSITIONS = {
@@ -33,13 +34,14 @@ function cablePath(start, end, boardRect) {
 }
 
 function TurntableNode({ confidence }) {
+  const displayConfidence = useCountUp(confidence, { duration: 1000 });
   return (
     <div className="reasoning-turntable" aria-label="Your hummed melody">
       <div className="turntable-screw" />
       <div className="turntable-disc"><span className="turntable-label">YOUR<br />HUM</span><span className="turntable-groove groove-one" /><span className="turntable-groove groove-two" /></div>
       <div className="turntable-arm" />
       <span className="turntable-caption">source signal</span>
-      <span className="turntable-confidence">{Math.round(confidence)}%</span>
+      <span className="turntable-confidence">{Math.round(displayConfidence)}%</span>
     </div>
   );
 }
@@ -111,6 +113,8 @@ export default function MatchReasoningBoard({ features = [] }) {
     setDraggingId(null);
   };
 
+  const displayConfidence = useCountUp(confidence, { duration: 1000 });
+
   if (!normalizedFeatures.length) return null;
 
   return (
@@ -143,7 +147,7 @@ export default function MatchReasoningBoard({ features = [] }) {
           </article>;
         })}
         <div className="console-label console-label-bottom">PITCH / RHYTHM / TEMPO / INTERVAL</div>
-        <div className="confidence-dial" aria-label={`Overall confidence ${Math.round(confidence)} percent`}><div className="dial-scale"><span>0</span><span>50</span><span>100</span></div><div className="dial-face"><div className="dial-needle" style={{ transform: `rotate(${-90 + (confidence * 1.8)}deg)` }} /><div className="dial-center" /></div><span className="dial-caption">overall confidence</span><strong>{Math.round(confidence)}<small>%</small></strong></div>
+        <div className="confidence-dial" aria-label={`Overall confidence ${Math.round(confidence)} percent`}><div className="dial-scale"><span>0</span><span>50</span><span>100</span></div><div className="dial-face"><div className="dial-needle" style={{ transform: `rotate(${-90 + (displayConfidence * 1.8)}deg)` }} /><div className="dial-center" /></div><span className="dial-caption">overall confidence</span><strong>{Math.round(displayConfidence)}<small>%</small></strong></div>
       </div>
     </section>
   );

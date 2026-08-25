@@ -17,13 +17,14 @@ import { CircleHelp, Music2 } from "lucide-react";
 import HeroRecorder from "./components/HeroRecorder";
 import MelodyNav from "./components/MelodyNav";
 import MatchReasoningBoard from "./components/MatchReasoningBoard";
+import WaveHero from "./components/WaveHero";
 import { MatchResults, MelodyAnalysis, MelodyDNA, MelodyLab, MelodyPipeline, MusicTaste } from "./components/StorySections";
 import { searchMelody } from "./lib/melodyApi";
 
 const RECORDING_LIMIT = 20;
 
 export default function App() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => document.documentElement.dataset.theme !== "light");
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioUrl, setAudioUrl] = useState("");
@@ -41,15 +42,29 @@ export default function App() {
   const canvasRef = useRef(null);
   const audioRef = useRef(null);
   const volumeFrameRef = useRef(null);
+  const heroRef = useRef(null);
+
+  const handleHeroPointerMove = (event) => {
+    const bounds = heroRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    heroRef.current.style.setProperty("--spot-x", `${((event.clientX - bounds.left) / bounds.width) * 100}%`);
+    heroRef.current.style.setProperty("--spot-y", `${((event.clientY - bounds.top) / bounds.height) * 100}%`);
+  };
+
+  useEffect(() => {
+    const theme = isDarkMode ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("melodymatch-theme", theme);
+  }, [isDarkMode]);
 
   const startRecording = async () => {
     setError(""); setMatches([]); setAiInsights(""); setAudioBlob(null); setAudioUrl(""); setRecordingSeconds(0); setInputVolume(0); audioChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const audioContext = new AudioContext(); const analyser = audioContext.createAnalyser(); analyser.fftSize = 128; audioContext.createMediaStreamSource(stream).connect(analyser); audioContextRef.current = audioContext; analyserRef.current = analyser;
+      const audioContext = new AudioContext(); const analyser = audioContext.createAnalyser(); analyser.fftSize = 2048; audioContext.createMediaStreamSource(stream).connect(analyser); audioContextRef.current = audioContext; analyserRef.current = analyser;
       const recorder = new MediaRecorder(stream); mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
-      recorder.onstop = () => { const blob = new Blob(audioChunksRef.current, { type: "audio/wav" }); setAudioBlob(blob); setAudioUrl(URL.createObjectURL(blob)); };
+      recorder.onstop = () => { const blob = new Blob(audioChunksRef.current, { type: "audio/webm" }); setAudioBlob(blob); setAudioUrl(URL.createObjectURL(blob)); };
       recorder.start(); setIsRecording(true);
     } catch { setError("Microphone permission denied or unavailable."); }
   };
@@ -88,8 +103,9 @@ export default function App() {
     <a className="skip-link" href="#main-content">Skip to content</a><MelodyNav onToggleTheme={() => setIsDarkMode((current) => !current)} />
     <nav className="topbar"><a className="wordmark" href="#discover" aria-label="MelodyMatch home"><span className="wordmark-mark"><Music2 size={17} /></span><span>melody<span>match</span></span></a><div className="topbar-meta"><span className="live-dot" /> music recognition lab <CircleHelp size={15} /></div></nav>
     <main id="main-content" className="page-content">
-      <section id="discover" className="discover-hero"><div className="intro-block"><p className="eyebrow">01 / discover</p><h1>Find the song<br /><em>in your head.</em></h1><p className="intro-copy">Hum it. Whistle it. Sing the bit you remember.<br />We will do the digging.</p><div className="hero-note"><span>FIELD NOTE 001</span><p>Every song leaves a shape behind.</p></div></div><HeroRecorder maxDuration={RECORDING_LIMIT} isRecording={isRecording} isLoading={isLoading} audioBlob={audioBlob} audioUrl={audioUrl} recordingSeconds={recordingSeconds} inputVolume={inputVolume} analyserRef={analyserRef} canvasRef={canvasRef} audioRef={audioRef} onStart={startRecording} onStop={stopRecording} onSearch={submitHumming} onReplay={startRecording} /></section>
+      <section id="discover" className="discover-hero" ref={heroRef} onMouseMove={handleHeroPointerMove}><div className="intro-block"><p className="eyebrow reveal-in">01 / discover</p><h1 className="reveal-in">Find the song<br /><em>in your head.</em></h1><p className="intro-copy reveal-in">Hum it. Whistle it. Sing the bit you remember.<br />We will do the digging.</p><div className="hero-note reveal-in"><span>FIELD NOTE 001</span><p>Every song leaves a shape behind.</p></div></div><HeroRecorder maxDuration={RECORDING_LIMIT} isRecording={isRecording} isLoading={isLoading} audioBlob={audioBlob} audioUrl={audioUrl} recordingSeconds={recordingSeconds} inputVolume={inputVolume} analyserRef={analyserRef} canvasRef={canvasRef} audioRef={audioRef} onStart={startRecording} onStop={stopRecording} onSearch={submitHumming} onReplay={startRecording} matches={matches} /></section>
       {error && <p className="error-message">{error}</p>}
+      <WaveHero accentColor="orange" />
       <MelodyAnalysis />
       <MelodyPipeline />
       <MatchResults matches={matches} reasoningFeatures={reasoningFeatures} aiInsights={aiInsights} onSelect={setSelectedSong} />
