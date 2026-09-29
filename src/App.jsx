@@ -19,7 +19,7 @@ import MelodyNav from "./components/MelodyNav";
 import MatchReasoningBoard from "./components/MatchReasoningBoard";
 import WaveHero from "./components/WaveHero";
 import { MatchResults, MelodyAnalysis, MelodyDNA, MelodyLab, MelodyPipeline, MusicTaste } from "./components/StorySections";
-import { searchMelody } from "./lib/melodyApi";
+import { fetchMelodyAnswer, searchMelody } from "./lib/melodyApi";
 
 const RECORDING_LIMIT = 20;
 
@@ -43,6 +43,7 @@ export default function App() {
   const audioRef = useRef(null);
   const volumeFrameRef = useRef(null);
   const heroRef = useRef(null);
+  const insightRequestRef = useRef(0);
 
   const handleHeroPointerMove = (event) => {
     const bounds = heroRef.current?.getBoundingClientRect();
@@ -58,6 +59,7 @@ export default function App() {
   }, [isDarkMode]);
 
   const startRecording = async () => {
+    insightRequestRef.current += 1;
     setError(""); setMatches([]); setAiInsights(""); setAudioBlob(null); setAudioUrl(""); setRecordingSeconds(0); setInputVolume(0); audioChunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -90,10 +92,70 @@ export default function App() {
 
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); audioContextRef.current?.close(); }, [audioUrl]);
 
-  const submitHumming = async () => {
-    if (!audioBlob) return;
+  const searchAudio = async (audio) => {
+    if (!audio) return;
+    const requestId = ++insightRequestRef.current;
     setIsLoading(true); setError("");
-    try { const data = await searchMelody(audioBlob); setMatches(data.results || []); setAiInsights(data.ai_insights || ""); } catch { setError("Failed to connect to backend engine. Please try again."); } finally { setIsLoading(false); }
+    try {
+      const data = await searchMelody(audio);
+      const results = Array.isArray(data.results) ? data.results : [];
+      setMatches(results);
+      setAiInsights(data.ai_insights || "");
+
+      if (!data.ai_insights && results.length > 0) {
+        fetchMelodyAnswer("Give a brief insight about the top song match.", results)
+          .then((answer) => {
+            if (requestId === insightRequestRef.current) setAiInsights(answer);
+          })
+          .catch(() => {});
+      }
+    } catch {
+      setError("Failed to connect to backend engine. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const submitHumming = () => searchAudio(audioBlob);
+
+  const handleAudioUpload = async (file) => {
+    if (!file) return;
+    insightRequestRef.current += 1;
+    setError("");
+    setMatches([]);
+    setAiInsights("");
+    setAudioBlob(null);
+    setAudioUrl("");
+    setRecordingSeconds(0);
+    const previewUrl = URL.createObjectURL(file);
+
+    try {
+      const duration = await new Promise((resolve, reject) => {
+        const audio = new Audio();
+        audio.preload = "metadata";
+        audio.onloadedmetadata = () => resolve(audio.duration);
+        audio.onerror = () => reject(new Error("This audio file could not be read."));
+        audio.src = previewUrl;
+      });
+
+      if (!Number.isFinite(duration) || duration <= 0) {
+        throw new Error("This audio file could not be read.");
+      }
+      if (duration >= RECORDING_LIMIT) {
+        throw new Error("Choose an audio file shorter than 20 seconds.");
+      }
+
+      setMatches([]);
+      setAiInsights("");
+      setAudioBlob(file);
+      setAudioUrl(previewUrl);
+      setRecordingSeconds(duration);
+      setInputVolume(0);
+      await searchAudio(file);
+    } catch (uploadError) {
+      URL.revokeObjectURL(previewUrl);
+      setError(uploadError.message || "Could not load this audio file.");
+    }
   };
 
   const returnedFeatures = matches[0]?.features || matches[0]?.feature_scores || [];
@@ -103,7 +165,7 @@ export default function App() {
     <a className="skip-link" href="#main-content">Skip to content</a><MelodyNav onToggleTheme={() => setIsDarkMode((current) => !current)} />
     <nav className="topbar"><a className="wordmark" href="#discover" aria-label="MelodyMatch home"><span className="wordmark-mark"><Music2 size={17} /></span><span>melody<span>match</span></span></a><div className="topbar-meta"><span className="live-dot" /> music recognition lab <CircleHelp size={15} /></div></nav>
     <main id="main-content" className="page-content">
-      <section id="discover" className="discover-hero" ref={heroRef} onMouseMove={handleHeroPointerMove}><div className="intro-block"><p className="eyebrow reveal-in">01 / discover</p><h1 className="reveal-in">Find the song<br /><em>in your head.</em></h1><p className="intro-copy reveal-in">Hum it. Whistle it. Sing the bit you remember.<br />We will do the digging.</p><div className="hero-note reveal-in"><span>FIELD NOTE 001</span><p>Every song leaves a shape behind.</p></div></div><HeroRecorder maxDuration={RECORDING_LIMIT} isRecording={isRecording} isLoading={isLoading} audioBlob={audioBlob} audioUrl={audioUrl} recordingSeconds={recordingSeconds} inputVolume={inputVolume} analyserRef={analyserRef} canvasRef={canvasRef} audioRef={audioRef} onStart={startRecording} onStop={stopRecording} onSearch={submitHumming} onReplay={startRecording} matches={matches} /></section>
+      <section id="discover" className="discover-hero" ref={heroRef} onMouseMove={handleHeroPointerMove}><div className="intro-block"><p className="eyebrow reveal-in">01 / discover</p><h1 className="reveal-in">Find the song<br /><em>in your head.</em></h1><p className="intro-copy reveal-in">Hum it. Whistle it. Sing the bit you remember.<br />We will do the digging.</p><div className="hero-note reveal-in"><span>FIELD NOTE 001</span><p>Every song leaves a shape behind.</p></div></div><HeroRecorder maxDuration={RECORDING_LIMIT} isRecording={isRecording} isLoading={isLoading} audioBlob={audioBlob} audioUrl={audioUrl} recordingSeconds={recordingSeconds} inputVolume={inputVolume} analyserRef={analyserRef} canvasRef={canvasRef} audioRef={audioRef} onStart={startRecording} onStop={stopRecording} onSearch={submitHumming} onReplay={startRecording} onUpload={handleAudioUpload} matches={matches} /></section>
       {error && <p className="error-message">{error}</p>}
       <WaveHero accentColor="orange" />
       <MelodyAnalysis />

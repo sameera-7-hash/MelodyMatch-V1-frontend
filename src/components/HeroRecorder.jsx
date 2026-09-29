@@ -1,4 +1,4 @@
-import { ArrowUpRight, Headphones, LoaderCircle, Mic, RotateCcw, Sparkles, Square } from "lucide-react";
+import { ArrowUpRight, Headphones, LoaderCircle, Mic, RotateCcw, Sparkles, Square, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { autoCorrelate, frequencyToNote } from "../lib/pitchDetection";
 
@@ -106,27 +106,103 @@ function ProcessingSteps({ isLoading }) {
   );
 }
 
-function BestMatchInline({ matches }) {
-  if (!matches?.length) return null;
-  const top = matches[0];
-  const confidence = top.confidence ?? top.similarity ?? top.score;
+function BestMatchInline({ matches, onUpload, uploadDisabled }) {
+  const fileInputRef = useRef(null);
+  const top = matches?.[0];
+  const confidence = top?.confidence ?? top?.similarity ?? top?.score;
+
   return (
-    <div className="best-match-inline">
-      <span>YOUR STRONGEST SIGNAL</span>
-      <div>
-        <strong>{top.title}</strong>
-        <em>{top.artist}</em>
+    <>
+      <div className="audio-upload-row">
+        <input
+          ref={fileInputRef}
+          className="audio-file-input"
+          type="file"
+          accept="audio/*"
+          aria-label="Choose an audio file shorter than 20 seconds"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) onUpload(file);
+            event.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          className="upload-audio-button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadDisabled}
+        >
+          <Upload size={15} /> Upload audio
+        </button>
+        <span>or choose a clip under 20 seconds</span>
       </div>
-      <b>{typeof confidence === "number" ? `${confidence.toFixed(1)}%` : confidence}</b>
-    </div>
+      {top && (
+        <div className="best-match-inline" aria-live="polite">
+          <span>YOUR STRONGEST SIGNAL</span>
+          <div>
+            <strong>{top.title}</strong>
+            <em>{top.artist}</em>
+          </div>
+          <b>{typeof confidence === "number" ? `${confidence.toFixed(1)}%` : confidence}</b>
+        </div>
+      )}
+    </>
   );
 }
 
-export default function HeroRecorder({ isRecording, isLoading, audioBlob, audioUrl, recordingSeconds, inputVolume, maxDuration, matches, analyserRef, canvasRef, audioRef, onStart, onStop, onSearch, onReplay }) {
+export default function HeroRecorder({ isRecording, isLoading, audioBlob, audioUrl, recordingSeconds, inputVolume, maxDuration, matches, analyserRef, canvasRef, audioRef, onStart, onStop, onSearch, onReplay, onUpload }) {
   const state = isRecording ? "LISTENING..." : isLoading ? "ANALYZING MELODY..." : audioBlob ? "MELODY CAPTURED" : "READY TO SEARCH";
   const seconds = `${Math.floor(recordingSeconds / 60).toString().padStart(2, "0")}:${Math.floor(recordingSeconds % 60).toString().padStart(2, "0")}`;
   const pitch = usePitchDetection(analyserRef, isRecording);
   const needleOffset = pitch ? Math.max(-12, Math.min(12, (pitch.cents / 50) * 12)) : 0;
 
-  return <section className={`recorder-panel ${isRecording ? "is-recording" : ""} ${isLoading ? "is-processing" : ""}`} aria-label="Melody recorder"><div className="panel-topline"><span>{state}</span><span className="duration">{isRecording ? `${seconds} / 00:${String(maxDuration).padStart(2, "0")}` : `maximum ${maxDuration} sec`}</span></div><div className="waveform-shell"><LiveWaveform analyserRef={analyserRef} canvasRef={canvasRef} isRecording={isRecording} audioUrl={audioUrl} audioRef={audioRef} /></div><div className="pitch-readout"><span>CURRENT PITCH</span><strong>{isRecording && pitch ? `${pitch.hz} Hz` : isRecording ? "listening..." : "—"}</strong><b>{isRecording && pitch ? pitch.note : "—"}</b><i style={{ transform: `translateY(${needleOffset}px)` }} /></div><div className="recorder-action"><div className="record-button-wrap" style={{ "--volume": inputVolume, "--countdown": `${(recordingSeconds / maxDuration) * 100}%` }}><span className="countdown-ring" /><button className={`record-button ${isRecording ? "stop" : ""}`} onClick={isRecording ? onStop : onStart} aria-label={isRecording ? "Stop recording" : "Start recording"}>{isRecording ? <Square size={21} fill="currentColor" /> : <Mic size={24} />}</button></div><div><strong>{state}</strong><span>{isRecording ? "Keep going, we are listening" : audioBlob ? "Replay it, then search" : "Hum, whistle, or sing the bit you remember"}</span></div></div>{audioUrl && !isRecording && <div className="sample-preview"><audio ref={audioRef} src={audioUrl} controls /><button className="icon-button" onClick={onReplay} aria-label="Record again"><RotateCcw size={16} /></button></div>}{!isRecording && audioBlob && <button className="search-button" onClick={onSearch} disabled={isLoading}>{isLoading ? <><LoaderCircle className="spin" size={18} /> ANALYZING MELODY...</> : <><Sparkles size={18} /> Search melody <ArrowUpRight size={17} /></>}</button>}{isLoading && <div className="matching-skeleton" aria-live="polite"><span className="skeleton-art" /><span className="skeleton-lines"><i /><i /><i /></span><ProcessingSteps isLoading={isLoading} /></div>}{!isLoading && <BestMatchInline matches={matches} />}<p className="privacy-note"><Headphones size={13} /> Your recording stays yours.</p></section>;
+  return (
+    <section className={`recorder-panel ${isRecording ? "is-recording" : ""} ${isLoading ? "is-processing" : ""}`} aria-label="Melody recorder">
+      <div className="panel-topline">
+        <span>{state}</span>
+        <span className="duration">{isRecording ? `${seconds} / 00:${String(maxDuration).padStart(2, "0")}` : `maximum ${maxDuration} sec`}</span>
+      </div>
+      <div className="waveform-shell">
+        <LiveWaveform analyserRef={analyserRef} canvasRef={canvasRef} isRecording={isRecording} audioUrl={audioUrl} audioRef={audioRef} />
+      </div>
+      <div className="pitch-readout">
+        <span>CURRENT PITCH</span>
+        <strong>{isRecording && pitch ? `${pitch.hz} Hz` : isRecording ? "listening..." : "—"}</strong>
+        <b>{isRecording && pitch ? pitch.note : "—"}</b>
+        <i style={{ transform: `translateY(${needleOffset}px)` }} />
+      </div>
+      <div className="recorder-action">
+        <div className="record-button-wrap" style={{ "--volume": inputVolume, "--countdown": `${(recordingSeconds / maxDuration) * 100}%` }}>
+          <span className="countdown-ring" />
+          <button className={`record-button ${isRecording ? "stop" : ""}`} onClick={isRecording ? onStop : onStart} aria-label={isRecording ? "Stop recording" : "Start recording"}>
+            {isRecording ? <Square size={21} fill="currentColor" /> : <Mic size={24} />}
+          </button>
+        </div>
+        <div>
+          <strong>{state}</strong>
+          <span>{isRecording ? "Keep going, we are listening" : audioBlob ? "Replay it, then search" : "Hum, whistle, or sing the bit you remember"}</span>
+        </div>
+      </div>
+      {audioUrl && !isRecording && (
+        <div className="sample-preview">
+          <audio ref={audioRef} src={audioUrl} controls />
+          <button className="icon-button" onClick={onReplay} aria-label="Record again"><RotateCcw size={16} /></button>
+        </div>
+      )}
+      {!isRecording && audioBlob && (
+        <button className="search-button" onClick={onSearch} disabled={isLoading}>
+          {isLoading ? <><LoaderCircle className="spin" size={18} /> ANALYZING MELODY...</> : <><Sparkles size={18} /> Search melody <ArrowUpRight size={17} /></>}
+        </button>
+      )}
+      {isLoading && (
+        <div className="matching-skeleton" aria-live="polite">
+          <span className="skeleton-art" />
+          <span className="skeleton-lines"><i /><i /><i /></span>
+          <ProcessingSteps isLoading={isLoading} />
+        </div>
+      )}
+      {!isLoading && <BestMatchInline matches={matches} onUpload={onUpload} uploadDisabled={isRecording} />}
+      <p className="privacy-note"><Headphones size={13} /> Your recording stays yours.</p>
+    </section>
+  );
 }

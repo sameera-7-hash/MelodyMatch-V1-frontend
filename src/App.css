@@ -193,6 +193,32 @@ button:focus-visible, a:focus-visible, audio:focus-visible { outline: 2px solid 
 }
 
 /* --- Inline best match card (shown in the recorder panel itself, no scrolling needed) --- */
+.audio-upload-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.audio-file-input { display: none; }
+.upload-audio-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  font: 500 10px 'DM Mono', monospace;
+  text-transform: uppercase;
+  transition: background .2s, border-color .2s;
+}
+.upload-audio-button:hover:not(:disabled) { background: color-mix(in srgb, var(--lime) 28%, transparent); border-color: var(--coral); }
+.upload-audio-button:disabled { opacity: .55; cursor: not-allowed; }
+
 .best-match-inline {
   display: flex;
   align-items: center;

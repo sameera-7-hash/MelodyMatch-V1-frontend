@@ -2,7 +2,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 export async function searchMelody(audioBlob) {
   const formData = new FormData();
-  formData.append("file", audioBlob, "hum.wav");
+  const extension = audioBlob.type?.split("/")[1]?.split(";")[0] || "wav";
+  formData.append("file", audioBlob, audioBlob.name || `hum.${extension}`);
   const response = await fetch(`${API_BASE_URL}/api/match-melody`, { method: "POST", body: formData });
   if (!response.ok) {
     const error = new Error(`Server status: ${response.status}`);
@@ -12,11 +13,11 @@ export async function searchMelody(audioBlob) {
   return response.json();
 }
 
-export async function fetchMelodyAnswer(userQuery) {
+export async function fetchMelodyAnswer(userQuery, matches) {
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: userQuery }),
+    body: JSON.stringify({ text: userQuery, ...(matches ? { matches } : {}) }),
   });
   if (!response.ok) {
     const error = new Error(`Server status: ${response.status}`);
